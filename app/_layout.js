@@ -6,13 +6,15 @@ export default function RootLayout() {
         <Stack.Screen
         name="(tabs)"
         options={{
-          headerShown:true
-        }}
+          headerShown:false
+        }} 
         />
 
         <Stack.Screen
         name="index"
-        options={{headerShown:true,title:"index"}}/>
+        options={{title:"index",headerShown:false}}/>
+     
       </Stack>
+
   )
 }

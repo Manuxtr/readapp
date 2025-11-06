@@ -1,21 +1,64 @@
 import { Audio } from 'expo-av'
-import { useEffect, useRef, useState } from "react"
-import { Animated, StyleSheet, Text, TouchableOpacity, View } from "react-native"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Animated, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native"
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context"
 import { LetterItems } from "../../components/myletters"
+import { appTheme } from '../../utilities/theme.colors'
+
+// Responsive sizing utilities
+
+const GRID_ITEMS_PER_ROW = 4 // Adjust this to control how many items per row
+
+const getResponsiveSizes = (screenWidth) => {
+    const gridPadding = screenWidth * 0.09 // 4% of screen width
+    const gridGap = screenWidth * 0.04 // 1% of screen width
+    const availableWidth = screenWidth - (gridPadding * 2)
+    const itemWidth = (availableWidth - (gridGap * (GRID_ITEMS_PER_ROW - 1))) / GRID_ITEMS_PER_ROW
+    
+    return {
+        gridPadding,
+        gridGap,
+        itemSize: itemWidth,
+        fontSize: Math.min(itemWidth * 0.6, 40), // Cap font size at 40
+        imageSize: itemWidth * 0.8,
+        borderWidth: Math.max(screenWidth * 0.006, 3), // Min 2px border
+    }
+}
 
 export default function Alphabets() {
-    // single-selection (toggle off by tapping again)
+    const { width: screenWidth } = useWindowDimensions()
+    const responsiveSizes = useMemo(() => getResponsiveSizes(screenWidth), [screenWidth])
+    
+    // per-item image toggles: tap once to show image, tap again to show letter
+    const [imageToggles, setImageToggles] = useState({})
+    // keep a selectedIndex to drive the image scale animation and border highlight
     const [selectedIndex, setSelectedIndex] = useState(null)
     const toggleIndex = (i) => {
-        setSelectedIndex(prev => prev === i ? null : i)
+        setImageToggles(prev => {
+            const turningOn = !prev[i]
+            const next = { ...prev, [i]: turningOn }
+
+            // control animation / selection explicitly
+            if (turningOn) {
+                // select this index and animate image in
+                setSelectedIndex(i)
+                Animated.spring(imageScale, { toValue: 1, useNativeDriver: true, friction: 6 }).start()
+            } else {
+                // deselect and reset animation immediately so letter shows
+                setSelectedIndex(null)
+                // set to 0 without animation to avoid a blank intermediate state
+                imageScale.setValue(0)
+            }
+
+            return next
+        })
     }
 
     // animated scale for letter images
     const imageScale = useRef(new Animated.Value(0)).current
 
     useEffect(() => {
-        if (selectedIndex !== null && LetterItems[selectedIndex].image) {
+        if (selectedIndex !== null && LetterItems[selectedIndex] && LetterItems[selectedIndex].image) {
             Animated.spring(imageScale, { toValue: 1, useNativeDriver: true, friction: 6 })
                 .start()
         } else {
@@ -52,9 +95,14 @@ export default function Alphabets() {
             console.log('Error playing sound', e)
         }
     }
+    const styles = useMemo(() => getStyles(responsiveSizes), [responsiveSizes])
+
     return(
         <SafeAreaProvider>
             <SafeAreaView style={styles.container}>
+                <View>
+                    <Text style = {styles.header}>ALPHABETS</Text>
+                </View>
                 <View style={styles.grid}>
                     {LetterItems.map(({ letter, image }, index) => (
                         <TouchableOpacity 
@@ -62,13 +110,20 @@ export default function Alphabets() {
                             style={[styles.letterBox, selectedIndex === index && styles.selectedBox]}
                             onPress={() => { toggleIndex(index); playPop() }}
                         >
-                            {image && selectedIndex === index ? (
+                            {image && imageToggles[index] ? (
+                                // show image when this item is toggled on
                                 <Animated.Image
                                     source={image}
-                                    style={[styles.letterImage, { transform: [{ scale: imageScale }], opacity: imageScale }]}
+                                    style={[
+                                        styles.letterImage,
+                                        selectedIndex === index
+                                            ? { transform: [{ scale: imageScale }], opacity: imageScale }
+                                            : { opacity: 1 }
+                                    ]}
                                     resizeMode="contain"
                                 />
                             ) : (
+                                // otherwise show the letter
                                 <Text style={styles.letter}>{letter}</Text>
                             )}
                         </TouchableOpacity>
@@ -79,26 +134,28 @@ export default function Alphabets() {
     )
 }
 
-const styles = StyleSheet.create({
+const getStyles = (sizes) => StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: appTheme.navy,
+        
     },
     grid: {
         flexDirection: 'row',
         flexWrap: 'wrap',
         justifyContent: 'center',
-        padding: 6,
-        gap:4
+        padding: sizes.gridPadding,
+        gap: sizes.gridGap,
+    
+        
     },
     letterBox: {
-        width: 70,
-        height: 70,
+        width: sizes.itemSize,
+        height: sizes.itemSize,
         justifyContent: 'center',
         alignItems: 'center',
-        margin: 5,
         backgroundColor: '#f0f0f0',
-        borderRadius: 100,
+        borderRadius: sizes.itemSize / 2,
         overflow: 'hidden',
         elevation: 3,
         shadowColor: '#000',
@@ -107,18 +164,23 @@ const styles = StyleSheet.create({
         shadowRadius: 3.84,
     },
     letter: {
-        fontSize: 37,
+        fontSize: sizes.fontSize,
         fontWeight: 'bold',
         color: '#333',
-    }
-    ,
+    },
     selectedBox: {
-        borderWidth: 3,
-        borderColor: 'red',
-    }
-    ,
+        borderWidth: sizes.borderWidth,
+        borderColor: appTheme.orange,
+    },
     letterImage: {
-        width: 56,
-        height: 56,
-    }
+        width: sizes.imageSize,
+        height: sizes.imageSize,
+    },
+  header: { textAlign: 'center',
+        fontSize: 24,
+        fontWeight: '700',
+        marginVertical: 8,
+        color:appTheme.orange,
+        letterSpacing:4.4,
+     }
 })
