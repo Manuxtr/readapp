@@ -29,42 +29,30 @@ export default function Alphabets() {
     const { width: screenWidth } = useWindowDimensions()
     const responsiveSizes = useMemo(() => getResponsiveSizes(screenWidth), [screenWidth])
     
-    // per-item image toggles: tap once to show image, tap again to show letter
+    // per-item flip toggles and per-item animated values
     const [imageToggles, setImageToggles] = useState({})
-    // keep a selectedIndex to drive the image scale animation and border highlight
-    const [selectedIndex, setSelectedIndex] = useState(null)
+    const flipAnimsRef = useRef({})
+
+    const getFlipAnim = (i) => {
+        if (!flipAnimsRef.current[i]) flipAnimsRef.current[i] = new Animated.Value(0)
+        return flipAnimsRef.current[i]
+    }
+
     const toggleIndex = (i) => {
         setImageToggles(prev => {
             const turningOn = !prev[i]
             const next = { ...prev, [i]: turningOn }
 
-            // control animation / selection explicitly
+            const anim = getFlipAnim(i)
             if (turningOn) {
-                // select this index and animate image in
-                setSelectedIndex(i)
-                Animated.spring(imageScale, { toValue: 1, useNativeDriver: true, friction: 6 }).start()
+                Animated.spring(anim, { toValue: 1, useNativeDriver: true, friction: 8 }).start()
             } else {
-                // deselect and reset animation immediately so letter shows
-                setSelectedIndex(null)
-                // set to 0 without animation to avoid a blank intermediate state
-                imageScale.setValue(0)
+                Animated.timing(anim, { toValue: 0, duration: 280, useNativeDriver: true }).start()
             }
 
             return next
         })
     }
-
-    // animated scale for letter images
-    const imageScale = useRef(new Animated.Value(0)).current
-
-    useEffect(() => {
-        if (selectedIndex !== null && LetterItems[selectedIndex] && LetterItems[selectedIndex].image) {
-            Animated.spring(imageScale, { toValue: 1, useNativeDriver: true, friction: 6 })
-                .start()
-        } else {
-            Animated.timing(imageScale, { toValue: 0, duration: 180, useNativeDriver: true }).start()
-        }
-    }, [selectedIndex, imageScale])
 
     // load pop sound once and keep a reference
     const soundRef = useRef(null)
@@ -107,25 +95,31 @@ export default function Alphabets() {
                     {LetterItems.map(({ letter, image }, index) => (
                         <TouchableOpacity 
                             key={index}
-                            style={[styles.letterBox, selectedIndex === index && styles.selectedBox]}
+                            style={[styles.letterBox, imageToggles[index] && styles.selectedBox]}
                             onPress={() => { toggleIndex(index); playPop() }}
                         >
-                            {image && imageToggles[index] ? (
-                                // show image when this item is toggled on
-                                <Animated.Image
-                                    source={image}
-                                    style={[
-                                        styles.letterImage,
-                                        selectedIndex === index
-                                            ? { transform: [{ scale: imageScale }], opacity: imageScale }
-                                            : { opacity: 1 }
-                                    ]}
-                                    resizeMode="contain"
-                                />
-                            ) : (
-                                // otherwise show the letter
-                                <Text style={styles.letter}>{letter}</Text>
-                            )}
+                            {(() => {
+                                const anim = getFlipAnim(index)
+
+                                const frontRotate = anim.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] })
+                                const backRotate = anim.interpolate({ inputRange: [0, 1], outputRange: ['180deg', '360deg'] })
+
+                                return (
+                                    <View style={styles.card}>
+                                        {/* front face (letter) - rotate from 0 to 180 */}
+                                        <Animated.View style={[styles.cardFace, styles.cardFront, { transform: [{ perspective: 1000 }, { rotateY: frontRotate }] }]}>
+                                            <Text style={styles.letter}>{letter}</Text>
+                                        </Animated.View>
+
+                                        {/* back face (image) - rotate from 180 to 360 so it becomes visible when card flips */}
+                                        {image ? (
+                                            <Animated.View style={[styles.cardFace, styles.cardBack, { transform: [{ perspective: 1000 }, { rotateY: backRotate }] }]} pointerEvents="none">
+                                                <Animated.Image source={image} style={styles.letterImage} resizeMode="contain" />
+                                            </Animated.View>
+                                        ) : null}
+                                    </View>
+                                )
+                            })()}
                         </TouchableOpacity>
                     ))}
                 </View>
@@ -154,9 +148,9 @@ const getStyles = (sizes) => StyleSheet.create({
         height: sizes.itemSize,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#f0f0f0',
-        borderRadius: sizes.itemSize / 2,
-        overflow: 'hidden',
+        // backgroundColor: '#f0f0f0',
+        // borderRadius: sizes.itemSize / 2,
+        // overflow: 'hidden',
         elevation: 3,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
@@ -171,10 +165,42 @@ const getStyles = (sizes) => StyleSheet.create({
     selectedBox: {
         borderWidth: sizes.borderWidth,
         borderColor: appTheme.orange,
+        borderRadius: sizes.itemSize / 2,
+        
     },
     letterImage: {
         width: sizes.imageSize,
         height: sizes.imageSize,
+    },
+    card: {
+        width: sizes.itemSize,
+        height: sizes.itemSize,
+        justifyContent: 'center',
+        alignItems: 'center',
+        position: 'relative',
+        borderRadius: sizes.itemSize / 2,
+        overflow: 'hidden',
+
+    },
+    cardFace: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backfaceVisibility: 'hidden',
+        backgroundColor: '#f0f0f0',
+        borderRadius: sizes.itemSize / 2,
+
+
+    },
+    cardFront: {
+        // front face (optional styles)
+    },
+    cardBack: {
+        // back face (optional styles)
     },
   header: { textAlign: 'center',
         fontSize: 24,
